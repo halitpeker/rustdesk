@@ -2,8 +2,11 @@
 # and publishes it as ToyaDestek.exe on the Releases page.
 #
 # Based on the official flutter-build.yml of RustDesk 1.5.3 (Windows x64 job only).
-# The only source change is the default ID server and its public key, patched
-# into libs/hbb_common/src/config.rs at build time (see "Set Toya server").
+# Source changes are applied at build time by two steps:
+#   "Set Toya server"   - default ID server and its public key (hbb_common config.rs)
+#   "Set Toya branding" - app name, exe properties, hidden "set up your own server" tip
+# The Toya icons are committed in place of the stock ones (res/, flutter/assets/icon.png,
+# flutter/windows/runner/resources/app_icon.ico).
 # The exe is NOT code signed.
 
 name: Toya Windows build
@@ -22,6 +25,10 @@ env:
   TOYA_SERVER: "rustdesk.toyayazilim.tr"
   TOYA_PUB_KEY: "V629TJnXXU5Wu0jtwJrrUzl70neU9iF6e0I3XLv8Uk8="
   TOYA_EXE_NAME: "ToyaDestek.exe"
+  # App name: letters, digits, "-" and "_" only (the installer rejects anything else).
+  TOYA_APP_NAME: "ToyaDestek"
+  TOYA_PRODUCT_NAME: "Toya Destek"
+  TOYA_COMPANY: "Toya Yazılım"
   RELEASE_TAG: "toya-1.5.3"
 
   SCITER_RUST_VERSION: "1.75"
@@ -151,6 +158,33 @@ jobs:
           grep -n -E '^pub const (RENDEZVOUS_SERVERS|RS_PUB_KEY):' "$f"
           grep -q -F "pub const RENDEZVOUS_SERVERS: &[&str] = &[\"$TOYA_SERVER\"];" "$f"
           grep -q -F "pub const RS_PUB_KEY: &str = \"$TOYA_PUB_KEY\";" "$f"
+
+      - name: Set Toya branding
+        shell: bash
+        run: |
+          # App name: also gives the client its own config folder and, because the
+          # name is no longer "RustDesk", turns off the stock update check.
+          f=libs/hbb_common/src/config.rs
+          sed -i -E 's|(pub static ref APP_NAME: RwLock<String> = RwLock::new\(")RustDesk("\.to_owned\(\)\);)|\1'"$TOYA_APP_NAME"'\2|' "$f"
+          grep -n 'pub static ref APP_NAME' "$f"
+          grep -q -F "pub static ref APP_NAME: RwLock<String> = RwLock::new(\"$TOYA_APP_NAME\".to_owned());" "$f"
+
+          # Exe properties (copyright line is left as it is)
+          rc=flutter/windows/runner/Runner.rc
+          sed -i             -e 's|VALUE "ProductName", "RustDesk"|VALUE "ProductName", "'"$TOYA_PRODUCT_NAME"'"|'             -e 's|VALUE "FileDescription", "RustDesk Remote Desktop"|VALUE "FileDescription", "'"$TOYA_PRODUCT_NAME"'"|'             -e 's|VALUE "CompanyName", "Purslane Tech Pte. Ltd."|VALUE "CompanyName", "'"$TOYA_COMPANY"'"|' "$rc"
+          grep -n -E 'VALUE "(ProductName|FileDescription|CompanyName)"' "$rc"
+          grep -q -F "VALUE \"ProductName\", \"$TOYA_PRODUCT_NAME\"" "$rc"
+          grep -q -F "VALUE \"FileDescription\", \"$TOYA_PRODUCT_NAME\"" "$rc"
+          grep -q -F "VALUE \"CompanyName\", \"$TOYA_COMPANY\"" "$rc"
+
+          # Hide the "set up your own server" tip: the built-in server is already ours
+          p=flutter/lib/desktop/pages/connection_page.dart
+          sed -i 's|_svcIsUsingPublicServer.value),|false),|' "$p"
+          if grep -q -F '_svcIsUsingPublicServer.value),' "$p"; then exit 1; fi
+          grep -q -F "stateGlobal.svcStatus.value == SvcStatus.ready &&" "$p"
+
+          # Toya icons must be present
+          ls -l res/icon.ico res/tray-icon.ico flutter/assets/icon.png flutter/windows/runner/resources/app_icon.ico
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -312,7 +346,9 @@ jobs:
           name: "Toya Destek (RustDesk ${{ env.VERSION }})"
           body: |
             RustDesk ${{ env.VERSION }} Windows x64, default server set to ${{ env.TOYA_SERVER }}.
-            Built from this branch; the only source change is in the "Set Toya server" step of
-            .github/workflows/toya-windows.yml. Not code signed. License: AGPL-3.0 (see LICENCE).
+            Built from this branch. Source changes: Toya icons, plus the "Set Toya server" and
+            "Set Toya branding" steps of .github/workflows/toya-windows.yml.
+            Based on RustDesk (https://github.com/rustdesk/rustdesk). Not code signed.
+            License: AGPL-3.0 (see LICENCE).
           files: |
             ./SignOutput/${{ env.TOYA_EXE_NAME }}
