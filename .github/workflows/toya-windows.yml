@@ -177,6 +177,15 @@ jobs:
           grep -q -F "VALUE \"FileDescription\", \"$TOYA_PRODUCT_NAME\"" "$rc"
           grep -q -F "VALUE \"CompanyName\", \"$TOYA_COMPANY\"" "$rc"
 
+          # Same properties for the outer self-extracting exe (the file customers download)
+          pc=libs/portable/Cargo.toml
+          sed -i -e 's|^ProductName = "RustDesk"|ProductName = "'"$TOYA_PRODUCT_NAME"'"|' "$pc"
+          sed -i -e 's|^FileDescription = "RustDesk Remote Desktop"|FileDescription = "'"$TOYA_PRODUCT_NAME"'"\nCompanyName = "'"$TOYA_COMPANY"'"|' "$pc"
+          grep -n -A6 -F '[package.metadata.winres]' "$pc"
+          grep -q -F "ProductName = \"$TOYA_PRODUCT_NAME\"" "$pc"
+          grep -q -F "FileDescription = \"$TOYA_PRODUCT_NAME\"" "$pc"
+          grep -q -F "CompanyName = \"$TOYA_COMPANY\"" "$pc"
+
           # Hide the "set up your own server" tip: the built-in server is already ours
           p=flutter/lib/desktop/pages/connection_page.dart
           sed -i 's|_svcIsUsingPublicServer.value),|false),|' "$p"
